@@ -76,15 +76,18 @@ public class DataAnalysisService {
         int numberOfRows = Math.max(0, rows.size() - 1);
         long totalCharacters = data.length();
 
-        // Initialize maps for null counts, unique values (non-null), and container to collect non-null values for type inference
+        // ===== Initialize maps =====
         Map<String, Integer> nullCounts = new LinkedHashMap<>();
         Map<String, Set<String>> uniqueValues = new LinkedHashMap<>();
+        Map<String, List<Double>> numericValues = new LinkedHashMap<>(); // Part 3
+
         for (String column : header) {
             nullCounts.put(column, 0);
             uniqueValues.put(column, new HashSet<>());
+            numericValues.put(column, new ArrayList<>()); // init for each column
         }
 
-        // Iterate over data rows
+        // ===== Process rows =====
         for (int i = 1; i < rows.size(); i++) {
             String[] values = rows.get(i);
             for (int c = 0; c < numberOfColumns; c++) {
@@ -94,7 +97,8 @@ public class DataAnalysisService {
                 } else {
                     String trimmed = val.trim();
                     uniqueValues.get(header[c]).add(trimmed);
-                    // ===== Part 3: keep track of numeric values =====
+
+                    // Part 3: store numeric values for advanced stats
                     if (isDecimal(trimmed)) {
                         numericValues.get(header[c]).add(Double.valueOf(trimmed));
                     }
@@ -138,7 +142,7 @@ public class DataAnalysisService {
                 .map(col -> {
                     Set<String> nonNull = uniqueValues.get(col);
                     String type = inferDataType(nonNull);
-                    List<Double> nums = numericValues.get(col);
+                    List<Double> nums = numericValues.get(col); // <--- use numericValues here
                     return new ColumnStatistics(
                             col,
                             nullCounts.get(col),
