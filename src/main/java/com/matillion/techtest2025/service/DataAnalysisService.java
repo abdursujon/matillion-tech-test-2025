@@ -23,6 +23,8 @@ import java.util.stream.Collectors;
  * <p>
  * Responsible for parsing data, calculating statistics, inferring column data types,
  * persisting results, and retrieving/deleting analyses.
+ *  Part 3: extended with advanced statistics (min, max, mean, median)
+ *  and a new method getAnalysisStatistics(id).
  */
 @Service
 @RequiredArgsConstructor
@@ -37,6 +39,8 @@ public class DataAnalysisService {
      * Parses the CSV, calculates statistics (row count, column count, character count,
      * null counts and unique counts per column), infers data type for each column,
      * persists the results to the database, and returns the analysis.
+     * enhanced for Part 3: also collects numeric values for later use
+     * * when calculating advanced statistics.
      */
     public DataAnalysisResponse analyzeCsvData(String data) {
         if (data == null || data.trim().isEmpty()) {
@@ -88,7 +92,12 @@ public class DataAnalysisService {
                 if (val == null || val.isBlank()) {
                     nullCounts.put(header[c], nullCounts.get(header[c]) + 1);
                 } else {
-                    uniqueValues.get(header[c]).add(val.trim());
+                    String trimmed = val.trim();
+                    uniqueValues.get(header[c]).add(trimmed);
+                    // ===== Part 3: keep track of numeric values =====
+                    if (isDecimal(trimmed)) {
+                        numericValues.get(header[c]).add(Double.valueOf(trimmed));
+                    }
                 }
             }
         }
@@ -124,15 +133,24 @@ public class DataAnalysisService {
 
         columnStatisticsRepository.saveAll(columnStatisticsEntities);
 
-        // Map entities to model for response
-        List<ColumnStatistics> columnStatsModels = columnStatisticsEntities.stream()
-                .map(e -> new ColumnStatistics(
-                        e.getColumnName(),
-                        e.getNullCount(),
-                        e.getUniqueCount(),
-                        e.getDataType()
-                ))
-                .collect(Collectors.toList());
+        // ===== Part 3: map ColumnStatistics with advanced stats =====
+        List<ColumnStatistics> columnStatsModels = Arrays.stream(header)
+                .map(col -> {
+                    Set<String> nonNull = uniqueValues.get(col);
+                    String type = inferDataType(nonNull);
+                    List<Double> nums = numericValues.get(col);
+                    return new ColumnStatistics(
+                            col,
+                            nullCounts.get(col),
+                            nonNull.size(),
+                            type,
+                            nums.isEmpty() ? null : Collections.min(nums),
+                            nums.isEmpty() ? null : Collections.max(nums),
+                            nums.isEmpty() ? null : mean(nums),
+                            nums.isEmpty() ? null : median(nums)
+                    );
+                })
+                .toList();
 
         return new DataAnalysisResponse(
                 dataAnalysisEntity.getId(),
@@ -162,7 +180,8 @@ public class DataAnalysisService {
                         stat.getColumnName(),
                         stat.getNullCount(),
                         stat.getUniqueCount(),
-                        stat.getDataType()
+                        stat.getDataType(),
+                        null, null, null, null // Part 3: advanced stats not recalculated here
                 ))
                 .collect(Collectors.toList());
 
@@ -181,15 +200,22 @@ public class DataAnalysisService {
      *
      * @param id the ID of the analysis
      * @throws NotFoundException if no analysis exists with the given ID
+     *  * ===== Part 3 =====
+     *      * New method: Re-analyze CSV to provide advanced stats (min, max, mean, median).
      */
-    public void deleteAnalysisById(Long id) {
-        DataAnalysisEntity entity = dataAnalysisRepository.findById(id).orElse(null);
-        if (entity == null) {
-            throw new NotFoundException("Analysis with id " + id + " not found");
-        }
-        dataAnalysisRepository.delete(entity);
+    public DataAnalysisResponse getAnalysisStatistics(Long id) {
+        DataAnalysisEntity entity = dataAnalysisRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Analysis with id " + id + " not found"));
+
+        return analyzeCsvData(entity.getOriginalData());
     }
 
+    public void deleteAnalysisById(Long id) {
+        if (!dataAnalysisRepository.existsById(id)) {
+            throw new NotFoundException("Analysis with id " + id + " not found");
+        }
+        dataAnalysisRepository.deleteById(id);
+    }
     // -------------------- Helpers --------------------
 
     /**
@@ -219,58 +245,52 @@ public class DataAnalysisService {
 
         return "STRING";
     }
-
     private boolean allBoolean(Set<String> values) {
-        for (String v : values) {
-            if (!(v.equalsIgnoreCase("true") || v.equalsIgnoreCase("false"))) {
-                return false;
-            }
-        }
-        return true;
+        return values.stream().allMatch(v -> v.equalsIgnoreCase("true") || v.equalsIgnoreCase("false"));
     }
 
     private boolean allInteger(Set<String> values) {
-        for (String v : values) {
-            if (!isInteger(v)) {
-                return false;
-            }
-        }
-        return true;
+        return values.stream().allMatch(this::isInteger);
     }
 
     private boolean allDecimal(Set<String> values) {
-        for (String v : values) {
-            if (!isDecimal(v)) {
-                return false;
-            }
-        }
-        return true;
+        return values.stream().allMatch(this::isDecimal);
     }
 
     private boolean isInteger(String v) {
         try {
-            // Accept optional leading +/-
-            if (v == null) return false;
-            String s = v.trim();
-            if (s.isEmpty()) return false;
-            // Disallow decimals like "1.0"
-            if (s.contains(".") || s.contains("e") || s.contains("E")) return false;
-            Long.parseLong(s);
+            if (v == null || v.isBlank()) return false;
+            if (v.contains(".") || v.contains("e") || v.contains("E")) return false;
+            Long.parseLong(v.trim());
             return true;
-        } catch (Exception ignored) {
+        } catch (Exception e) {
             return false;
         }
     }
 
     private boolean isDecimal(String v) {
         try {
-            if (v == null) return false;
-            String s = v.trim();
-            if (s.isEmpty()) return false;
-            new BigDecimal(s);
+            if (v == null || v.isBlank()) return false;
+            new BigDecimal(v.trim());
             return true;
-        } catch (Exception ignored) {
+        } catch (Exception e) {
             return false;
+        }
+    }
+
+    private Double mean(List<Double> nums) {
+        return nums.stream().mapToDouble(d -> d).average().orElse(Double.NaN);
+    }
+
+    private Double median(List<Double> nums) {
+        if (nums.isEmpty()) return null;
+        List<Double> sorted = new ArrayList<>(nums);
+        Collections.sort(sorted);
+        int n = sorted.size();
+        if (n % 2 == 1) {
+            return sorted.get(n / 2);
+        } else {
+            return (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2.0;
         }
     }
 }

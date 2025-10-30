@@ -68,4 +68,14 @@ public class DataAnalysisController {
     public void deleteAnalysisById(@PathVariable Long id) {
         dataAnalysisService.deleteAnalysisById(id);
     }
+
+
+    /**
+     * ===== Part 3 =====
+     * New endpoint: returns advanced statistics (min, max, mean, median).
+     */
+    @GetMapping("/{id}/statistics")
+    public DataAnalysisResponse getAnalysisStatistics(@PathVariable Long id) {
+        return dataAnalysisService.getAnalysisStatistics(id);
+    }
 }

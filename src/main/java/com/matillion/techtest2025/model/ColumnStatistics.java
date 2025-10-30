@@ -27,6 +27,11 @@ public record ColumnStatistics(
         String columnName,
         int nullCount,
         int uniqueCount,
-        String dataType
+        String dataType,
+        // ===== Part 3: Advanced statistics =====
+        Double min,
+        Double max,
+        Double mean,
+        Double median
 ) implements Serializable {
 }
