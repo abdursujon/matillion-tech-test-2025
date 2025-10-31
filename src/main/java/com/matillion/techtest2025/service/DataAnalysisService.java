@@ -262,13 +262,13 @@ public class DataAnalysisService {
 
     /*
      * Part 3 addition :
-     * New endpoint logic that re-analyzes stored CSV data
-     * and returns results including numeric statistics (min, max, mean, median).
+     * Fixed implementation — re-analyzes stored CSV data without persisting a new entry.
+     * Keeps the same analysis ID.
      */
     public DataAnalysisResponse getAnalysisStatistics(Long id) {
         DataAnalysisEntity entity = dataAnalysisRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Analysis with id " + id + " not found"));
-        return analyzeCsvData(entity.getOriginalData());
+        return reanalyzeWithoutPersisting(entity);
     }
 
     public void deleteAnalysisById(Long id) {
@@ -291,6 +291,80 @@ public class DataAnalysisService {
     }
 
     // -------------------- Part 3: Advanced Statistics Helpers --------------------
+
+    private DataAnalysisResponse reanalyzeWithoutPersisting(DataAnalysisEntity entity) {
+        String data = entity.getOriginalData();
+        List<String[]> rows = new ArrayList<>();
+
+        try (BufferedReader reader = new BufferedReader(new StringReader(data.trim()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                rows.add(line.split(",", -1));
+            }
+        } catch (Exception e) {
+            throw new BadRequestException("Invalid CSV format");
+        }
+
+        if (rows.isEmpty() || rows.get(0).length == 0) {
+            throw new BadRequestException("Invalid CSV header");
+        }
+
+        String[] header = rows.get(0);
+        int numberOfColumns = header.length;
+        int numberOfRows = Math.max(0, rows.size() - 1);
+        long totalCharacters = data.length();
+
+        Map<String, Integer> nullCounts = new LinkedHashMap<>();
+        Map<String, Set<String>> uniqueValues = new LinkedHashMap<>();
+        Map<String, List<Double>> numericValues = new LinkedHashMap<>();
+
+        for (String col : header) {
+            nullCounts.put(col, 0);
+            uniqueValues.put(col, new HashSet<>());
+            numericValues.put(col, new ArrayList<>());
+        }
+
+        for (int i = 1; i < rows.size(); i++) {
+            String[] values = rows.get(i);
+            for (int c = 0; c < numberOfColumns; c++) {
+                String val = values[c];
+                if (val == null || val.isBlank()) {
+                    nullCounts.put(header[c], nullCounts.get(header[c]) + 1);
+                } else {
+                    String trimmed = val.trim();
+                    uniqueValues.get(header[c]).add(trimmed);
+                    if (isDecimal(trimmed)) numericValues.get(header[c]).add(Double.valueOf(trimmed));
+                }
+            }
+        }
+
+        List<ColumnStatistics> columnStatsModels = Arrays.stream(header)
+                .map(col -> {
+                    Set<String> nonNull = uniqueValues.get(col);
+                    String type = inferDataType(nonNull);
+                    List<Double> nums = numericValues.get(col);
+                    return new ColumnStatistics(
+                            col,
+                            nullCounts.get(col),
+                            nonNull.size(),
+                            type,
+                            nums.isEmpty() ? null : Collections.min(nums),
+                            nums.isEmpty() ? null : Collections.max(nums),
+                            nums.isEmpty() ? null : mean(nums),
+                            nums.isEmpty() ? null : median(nums)
+                    );
+                })
+                .toList();
+
+        return new DataAnalysisResponse(
+                entity.getId(),
+                numberOfRows,
+                numberOfColumns,
+                totalCharacters,
+                columnStatsModels,
+                entity.getCreatedAt()
+        );
+    }
 
     private String inferDataType(Set<String> nonNullValues) {
         if (nonNullValues == null || nonNullValues.isEmpty()) return "STRING";

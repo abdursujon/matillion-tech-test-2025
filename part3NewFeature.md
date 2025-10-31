@@ -96,9 +96,9 @@ GET /api/analysis/1/statistics
 
 ---
 ## Solution Success Image
-![Test 2 Summary – 100% Successful](/images/newFeatureImg1.png)
-![Test 2 Summary – 100% Successful](/images/NewFeatureAPI.png)
-### `GET /api/analysis/{id}/statistics`
+![Test 2 Summary – 100% Successful](/images/newFeature.png)
+![Test 2 Summary – 100% Successful](/images/newFeature2.png)
+
 ---
 
 ## Benefits
