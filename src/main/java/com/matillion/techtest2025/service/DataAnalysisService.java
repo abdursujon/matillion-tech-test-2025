@@ -1,3 +1,5 @@
+/* Annotated with test mappings for Part1, Part2 and Part3 (advanced statistics) */
+
 package com.matillion.techtest2025.service;
 
 import com.matillion.techtest2025.controller.response.DataAnalysisResponse;
@@ -37,12 +39,17 @@ public class DataAnalysisService {
      * Analyzes CSV data and returns statistics.
      * <p>
      * Parses the CSV, calculates statistics (row count, column count, character count,
-     * null counts and unique counts per column), infers data type for each column,
-     * persists the results to the database, and returns the analysis.
-     * enhanced for Part 3: also collects numeric values for later use
-     * * when calculating advanced statistics.
+     * null counts per column), persists the results to the database, and returns the analysis.
+     * <p>
+     * Part 3 extends this method to compute numeric statistics (min, max, mean, median)
+     * for all numeric columns.
      */
     public DataAnalysisResponse analyzeCsvData(String data) {
+
+        /*
+         * Logic to handle failing test :
+         * Part1Tests.shouldReturnBadRequestForInvalidCsv
+         */
         if (data == null || data.trim().isEmpty()) {
             throw new BadRequestException("CSV data must not be empty");
         }
@@ -51,13 +58,18 @@ public class DataAnalysisService {
         try (BufferedReader reader = new BufferedReader(new StringReader(data.trim()))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                String[] parts = line.split(",", -1); // include empty trailing columns
+                String[] parts = line.split(",", -1);
                 rows.add(parts);
             }
         } catch (Exception e) {
             throw new BadRequestException("Invalid CSV format");
         }
 
+        /*
+         * Logic to handle failing test :
+         * Part1Tests.shouldHandleEmptyCsvWithHeaderOnly
+         * Part1Tests.shouldAnalyzeSimpleCsv
+         */
         if (rows.isEmpty() || rows.get(0).length == 0) {
             throw new BadRequestException("Invalid CSV header");
         }
@@ -65,6 +77,10 @@ public class DataAnalysisService {
         String[] header = rows.get(0);
         int numberOfColumns = header.length;
 
+        /*
+         * Logic to handle failing test :
+         * Part1Tests.shouldReturnBadRequestForInvalidCsv
+         */
         for (int i = 0; i < rows.size(); i++) {
             if (rows.get(i).length != numberOfColumns) {
                 throw new BadRequestException(
@@ -73,18 +89,28 @@ public class DataAnalysisService {
             }
         }
 
+        /*
+         * Logic to handle failing test :
+         * Part1Tests.shouldHandleSingleRowCsv
+         * Part1Tests.shouldHandleLargeCsv
+         */
         int numberOfRows = Math.max(0, rows.size() - 1);
         long totalCharacters = data.length();
 
-        // ===== Initialize maps =====
         Map<String, Integer> nullCounts = new LinkedHashMap<>();
         Map<String, Set<String>> uniqueValues = new LinkedHashMap<>();
-        Map<String, List<Double>> numericValues = new LinkedHashMap<>(); // Part 3
+
+        /*
+         * Part 3 addition :
+         * Initialize numericValues map to store numeric values for each column.
+         * These will later be used to compute min, max, mean, and median.
+         */
+        Map<String, List<Double>> numericValues = new LinkedHashMap<>();
 
         for (String column : header) {
             nullCounts.put(column, 0);
             uniqueValues.put(column, new HashSet<>());
-            numericValues.put(column, new ArrayList<>()); // init for each column
+            numericValues.put(column, new ArrayList<>());
         }
 
         // ===== Process rows =====
@@ -92,13 +118,31 @@ public class DataAnalysisService {
             String[] values = rows.get(i);
             for (int c = 0; c < numberOfColumns; c++) {
                 String val = values[c];
+
+                /*
+                 * Logic to handle failing test :
+                 * Part1Tests.shouldCountNullValuesCorrectly
+                 * Part1Tests.shouldHandleMixedNullValues
+                 * Part2Tests.shouldExcludeNullsFromUniqueCount
+                 */
                 if (val == null || val.isBlank()) {
                     nullCounts.put(header[c], nullCounts.get(header[c]) + 1);
                 } else {
                     String trimmed = val.trim();
+
+                    /*
+                     * Logic to handle failing test :
+                     * Part2Tests.shouldCalculateUniqueCountsForSimpleCsv
+                     * Part2Tests.shouldCalculateUniqueCountsWithDuplicates
+                     * Part2Tests.shouldReturnZeroUniqueCountForEmptyCsv
+                     */
                     uniqueValues.get(header[c]).add(trimmed);
 
-                    // Part 3: store numeric values for advanced stats
+                    /*
+                     * Part 3 addition :
+                     * When a value is numeric (integer or decimal), store it for statistical analysis.
+                     * These lists are used later to calculate min, max, mean, and median per column.
+                     */
                     if (isDecimal(trimmed)) {
                         numericValues.get(header[c]).add(Double.valueOf(trimmed));
                     }
@@ -106,7 +150,12 @@ public class DataAnalysisService {
             }
         }
 
-        // Persist parent analysis entity
+        /*
+         * Logic to handle failing test :
+         * Part1Tests.shouldPersistCorrectAnalysisData
+         * Part1Tests.shouldPersistColumnStatisticsEntities
+         * Part2Tests.shouldPersistUniqueCountsToDatabase
+         */
         OffsetDateTime creationTimestamp = OffsetDateTime.now();
         DataAnalysisEntity dataAnalysisEntity = DataAnalysisEntity.builder()
                 .originalData(data)
@@ -118,7 +167,11 @@ public class DataAnalysisService {
 
         dataAnalysisRepository.save(dataAnalysisEntity);
 
-        // Build and persist per-column statistics (with unique counts and inferred data type)
+        /*
+         * Logic to handle failing test :
+         * Part2Tests.shouldCalculateUniqueCountsForSimpleCsv
+         * Part2Tests.shouldExcludeNullsFromUniqueCount
+         */
         List<ColumnStatisticsEntity> columnStatisticsEntities = header.length == 0
                 ? Collections.emptyList()
                 : Arrays.stream(header)
@@ -137,12 +190,17 @@ public class DataAnalysisService {
 
         columnStatisticsRepository.saveAll(columnStatisticsEntities);
 
-        // ===== Part 3: map ColumnStatistics with advanced stats =====
+        /*
+         * Part 3 addition :
+         * Build ColumnStatistics list that includes new fields:
+         * min, max, mean, and median — for numeric columns only.
+         */
+
         List<ColumnStatistics> columnStatsModels = Arrays.stream(header)
                 .map(col -> {
                     Set<String> nonNull = uniqueValues.get(col);
                     String type = inferDataType(nonNull);
-                    List<Double> nums = numericValues.get(col); // <--- use numericValues here
+                    List<Double> nums = numericValues.get(col);
                     return new ColumnStatistics(
                             col,
                             nullCounts.get(col),
@@ -166,26 +224,29 @@ public class DataAnalysisService {
         );
     }
 
-    /**
-     * Retrieves a previously saved analysis by ID.
-     *
-     * @param id the ID of the analysis
-     * @return the analysis response
-     * @throws NotFoundException if no analysis exists with the given ID
-     */
     public DataAnalysisResponse getAnalysisById(Long id) {
+
+        /*
+         * Logic to handle failing test :
+         * Part2Tests.shouldReturn404ForNonExistentAnalysis
+         * Part2Tests.shouldRetrievePreviousAnalysisById
+         */
         DataAnalysisEntity entity = dataAnalysisRepository.findById(id).orElse(null);
         if (entity == null) {
             throw new NotFoundException("Analysis with id " + id + " not found");
         }
 
+        /*
+         * Logic to handle failing test :
+         * Part2Tests.shouldRetrieveMultipleAnalysesIndependently
+         */
         List<ColumnStatistics> columnStatsModels = entity.getColumnStatistics().stream()
                 .map(stat -> new ColumnStatistics(
                         stat.getColumnName(),
                         stat.getNullCount(),
                         stat.getUniqueCount(),
                         stat.getDataType(),
-                        null, null, null, null // Part 3: advanced stats not recalculated here
+                        null, null, null, null // Part 3 stats not recomputed here
                 ))
                 .collect(Collectors.toList());
 
@@ -199,56 +260,46 @@ public class DataAnalysisService {
         );
     }
 
-    /**
-     * Deletes an analysis by ID (cascade deletes column statistics).
-     *
-     * @param id the ID of the analysis
-     * @throws NotFoundException if no analysis exists with the given ID
-     *  * ===== Part 3 =====
-     *      * New method: Re-analyze CSV to provide advanced stats (min, max, mean, median).
+    /*
+     * Part 3 addition :
+     * New endpoint logic that re-analyzes stored CSV data
+     * and returns results including numeric statistics (min, max, mean, median).
      */
     public DataAnalysisResponse getAnalysisStatistics(Long id) {
         DataAnalysisEntity entity = dataAnalysisRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Analysis with id " + id + " not found"));
-
         return analyzeCsvData(entity.getOriginalData());
     }
 
     public void deleteAnalysisById(Long id) {
+
+        /*
+         * Logic to handle failing test :
+         * Part2Tests.shouldReturn404WhenDeletingNonExistentAnalysis
+         */
         if (!dataAnalysisRepository.existsById(id)) {
             throw new NotFoundException("Analysis with id " + id + " not found");
         }
+
+        /*
+         * Logic to handle failing test :
+         * Part2Tests.shouldDeleteAnalysisById
+         * Part2Tests.shouldCascadeDeleteColumnStatistics
+         * Part2Tests.shouldDeleteOnlySpecifiedAnalysis
+         */
         dataAnalysisRepository.deleteById(id);
     }
-    // -------------------- Helpers --------------------
 
-    /**
-     * Infers the data type of a column from its non-null values.
-     * Priority:
-     *  - BOOLEAN if all values are "true"/"false" (case-insensitive)
-     *  - INTEGER if all values are integers
-     *  - DECIMAL if all values are numeric (BigDecimal), but not all integers
-     *  - STRING otherwise, or if there are no non-null values
-     */
+    // -------------------- Part 3: Advanced Statistics Helpers --------------------
+
     private String inferDataType(Set<String> nonNullValues) {
-        if (nonNullValues == null || nonNullValues.isEmpty()) {
-            return "STRING";
-        }
-
-        if (allBoolean(nonNullValues)) {
-            return "BOOLEAN";
-        }
-
-        if (allInteger(nonNullValues)) {
-            return "INTEGER";
-        }
-
-        if (allDecimal(nonNullValues)) {
-            return "DECIMAL";
-        }
-
+        if (nonNullValues == null || nonNullValues.isEmpty()) return "STRING";
+        if (allBoolean(nonNullValues)) return "BOOLEAN";
+        if (allInteger(nonNullValues)) return "INTEGER";
+        if (allDecimal(nonNullValues)) return "DECIMAL";
         return "STRING";
     }
+
     private boolean allBoolean(Set<String> values) {
         return values.stream().allMatch(v -> v.equalsIgnoreCase("true") || v.equalsIgnoreCase("false"));
     }
@@ -282,10 +333,19 @@ public class DataAnalysisService {
         }
     }
 
+    /*
+     * Part 3 addition :
+     * Computes the arithmetic mean (average) for numeric values.
+     */
     private Double mean(List<Double> nums) {
         return nums.stream().mapToDouble(d -> d).average().orElse(Double.NaN);
     }
 
+    /*
+     * Part 3 addition :
+     * Computes the median value for numeric lists.
+     * If count is even, returns average of two middle values.
+     */
     private Double median(List<Double> nums) {
         if (nums.isEmpty()) return null;
         List<Double> sorted = new ArrayList<>(nums);

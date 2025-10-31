@@ -1,4 +1,4 @@
-# Part 3: Statistical Analysis Endpoint 🚀
+# Part 3: New API Feature - Statistical Analysis Endpoint 
 
 ## Overview
 In Part 3, the service was extended to go beyond basic row/column/null/unique counts.  
@@ -8,8 +8,8 @@ This makes the API more powerful and closer to real-world data profiling/analyti
 
 ---
 
-## Problem
-Before Part 3, the API could only tell you:
+## Problem it solves
+Before Part 3, the API could only show:
 - How many rows and columns exist  
 - Null counts per column  
 - Unique counts per column  
@@ -36,47 +36,6 @@ This endpoint re-analyzes the original CSV data stored in the database and retur
 
 For non-numeric columns, these fields return `null`.  
 
----
-
-## API Endpoints (Part 3 Additions)
-
-### 1. Ingest CSV (from Part 1 & 2)
-```http
-POST /api/analysis/ingestCsv
-Content-Type: text/csv
-```
-
-Uploads and analyzes a new CSV file.  
-
----
-
-### 2. Get Analysis by ID (from Part 2)
-```http
-GET /api/analysis/{id}
-```
-
-Returns basic analysis (no advanced stats).  
-
----
-
-### 3. Delete Analysis by ID (from Part 2)
-```http
-DELETE /api/analysis/{id}
-```
-
-Deletes an analysis and all associated column statistics.  
-
----
-
-### 4. 🚀 New: Get Advanced Statistics (Part 3)
-```http
-GET /api/analysis/{id}/statistics
-```
-
-Returns the same analysis but with **min, max, mean, and median** for numeric columns.  
-
----
-
 ## Example
 
 ### CSV Input
@@ -89,16 +48,16 @@ Charles Leclerc,16,Ferrari
 
 ### Request
 ```http
-GET /api/analysis/7/statistics
+GET /api/analysis/1/statistics
 ```
 
 ### Response
 ```json
 {
-  "id": 7,
+  "id": 1,
   "numberOfRows": 3,
   "numberOfColumns": 3,
-  "totalCharacters": 97,
+  "totalCharacters": 105,
   "columnStatistics": [
     {
       "columnName": "driver",
@@ -117,7 +76,7 @@ GET /api/analysis/7/statistics
       "dataType": "INTEGER",
       "min": 1,
       "max": 44,
-      "mean": 20.33,
+      "mean": 20.333333333333332,
       "median": 16
     },
     {
@@ -131,10 +90,15 @@ GET /api/analysis/7/statistics
       "median": null
     }
   ],
-  "createdAt": "2025-10-29T23:56:19Z"
+  "createdAt": "2025-10-31T20:44:40.3181869Z"
 }
 ```
 
+---
+## Solution Success Image
+![Test 2 Summary – 100% Successful](/images/newFeatureImg1.png)
+![Test 2 Summary – 100% Successful](/images/NewFeatureAPI.png)
+### `GET /api/analysis/{id}/statistics`
 ---
 
 ## Benefits
@@ -166,7 +130,3 @@ GET /api/analysis/7/statistics
 
 ---
 
-✅ With Part 3, this project now covers:  
-- **Data ingestion** (Part 1)  
-- **Persistence & retrieval** (Part 2)  
-- **Advanced statistics & insights** (Part 3)  

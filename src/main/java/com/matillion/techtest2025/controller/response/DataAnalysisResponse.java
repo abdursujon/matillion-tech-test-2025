@@ -37,8 +37,8 @@ import java.util.List;
  * @param columnStatistics a list of statistics for each column
  * @see ColumnStatistics
  */
-public record DataAnalysisResponse(
 
+public record DataAnalysisResponse(
         Long id, int numberOfRows,
         int numberOfColumns,
         long totalCharacters,
